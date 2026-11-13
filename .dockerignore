@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+venv
+.vscode
+.env
+*.env
+**/__pycache__
+**/*.py[cod]
+**/*.sqlite3
+smartshop/staticfiles
+/*.png
+README.md

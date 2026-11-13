@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smartshop
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-secret
+      DJANGO_DEBUG: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r ../requirements.txt
+      - name: System check
+        run: python manage.py check
+      - name: Migrations are up to date
+        run: python manage.py makemigrations --check --dry-run
+      - name: Tests
+        run: python manage.py test --verbosity 2
+      - name: Catalog fixture loads
+        run: python manage.py migrate --noinput && python manage.py loaddata catalog
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t smartshop-web:ci .
+      - name: Smoke test container
+        run: |
+          docker run -d --name web -p 8000:8000 \
+            -e DJANGO_SECRET_KEY=ci-only-not-secret \
+            -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            smartshop-web:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/healthz; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/healthz
+          curl -fsS -o /dev/null -w "login page: %{http_code}\n" http://localhost:8000/accounts/login/
+          curl -fsS "http://localhost:8000/search/?q=iphone" | grep -q "iPhone" && echo "search returns catalog products"
+          curl -fsS -o /dev/null -w "static css: %{http_code}\n" http://localhost:8000/static/css/style.css
+      - name: Container logs
+        if: always()
+        run: docker logs web || true

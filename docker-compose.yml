@@ -1,0 +1,23 @@
+# Local production-like stack.  Usage:  docker compose up --build
+# Postgres, Redis and Kafka will be added here in later phases.
+services:
+  web:
+    build: .
+    image: smartshop-web:local
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+      RUN_MIGRATIONS: "true"
+      LOAD_CATALOG: "true"
+    volumes:
+      - db_data:/data
+    restart: unless-stopped
+
+volumes:
+  db_data:

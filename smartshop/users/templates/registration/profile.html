@@ -8,8 +8,9 @@
 <div class="container mt-4">
     <div class="row">
         <div class="col-md-3 text-center">
-            {# Placeholder for profile picture #}
-            <img src="{% static 'img/default_profile.png' %}" class="img-thumbnail rounded-circle mb-2" alt="{{ user.username }} profile picture" width="150">
+            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-2" style="width: 120px; height: 120px;">
+                <i class="bi bi-person fs-1 text-secondary"></i>
+            </div>
             <h4>{{ user.username }}</h4>
             <p class="text-muted">{{ user.email }}</p>
             {# <a href="#" class="btn btn-sm btn-outline-secondary">Edit Picture</a> #}
@@ -22,57 +23,17 @@
             {# Input area for text/voice descriptions #}
             <div class="mb-4 p-3 border rounded bg-light">
                 <h5>Describe Your Preferences</h5>
-                <p>Enter details like "I prefer the Men's department, my height is 6 feet, I like a slim fit, and my budget is under 150 dollars" or use the microphone.</p>
-                <textarea id="preference-input" class="form-control mb-2" rows="3" placeholder="Enter preferences here..."></textarea>
-                <button id="process-text-btn" class="btn btn-primary me-2">Process Text</button>
-                <button id="voice-input-btn" class="btn btn-secondary"><i class="bi bi-mic-fill"></i> Use Voice</button>
+                <p class="small text-muted">Type or say something like “I am a man, 5 feet 8 inches, 70 kg, 25 years old, and I like a slim fit”. We'll fill in the form below for you to review.</p>
+                <textarea id="preference-input" class="form-control mb-2" rows="2" placeholder="Describe yourself..."></textarea>
+                <button id="process-text-btn" type="button" class="btn btn-primary me-2">Process Text</button>
+                <button id="voice-input-btn" type="button" class="btn btn-secondary"><i class="bi bi-mic-fill"></i> Use Voice</button>
                 <span id="voice-status" class="ms-2 text-muted"></span>
+                <div id="preference-feedback" role="status" aria-live="polite"></div>
             </div>
 
-            <form method="POST">
+            <form method="POST" novalidate>
                 {% csrf_token %}
-                <div class="form-group">
-                    <label for="id_preferred_department">Preferred Department</label>
-                    <select id="id_preferred_department" name="preferred_department" class="form-control">
-                        <option value="Men">Men</option>
-                        <option value="Women">Women</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="id_height_cm">Height (cm)</label>
-                    <input type="number" id="id_height_cm" name="height_cm" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label for="id_weight_kg">Weight (kg)</label>
-                    <input type="number" id="id_weight_kg" name="weight_kg" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label for="id_age_group">Age Group</label>
-                    <select id="id_age_group" name="age_group" class="form-control">
-                        <option value="18-24">18-24</option>
-                        <option value="25-34">25-34</option>
-                        <option value="35-44">35-44</option>
-                        <option value="45-54">45-54</option>
-                        <option value="55+">55+</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="id_preferred_fit">Preferred Fit</label>
-                    <select id="id_preferred_fit" name="preferred_fit" class="form-control">
-                        <option value="slim">Slim Fit</option>
-                        <option value="regular">Regular Fit</option>
-                        <option value="relaxed">Relaxed Fit</option>
-                        <option value="loose">Loose Fit</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="id_mobile_number">Mobile Number</label>
-                    <input type="text" id="id_mobile_number" name="mobile_number" class="form-control" value="{{ user.profile.mobile_number }}">
-                </div>
-                <div class="form-group">
-                    <label for="id_delivery_location">Delivery Location</label>
-                    <textarea id="id_delivery_location" name="delivery_location" class="form-control" rows="3">{{ user.profile.delivery_location }}</textarea>
-                </div>
+                {{ p_form|crispy }}
                 <button type="submit" class="btn btn-primary">Save Profile</button>
             </form>
         </div>

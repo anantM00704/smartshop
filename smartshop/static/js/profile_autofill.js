@@ -18,37 +18,59 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     } // Ensure this matches your Django URL configuration
 
+    const feedback = document.getElementById('preference-feedback');
+
+    function showFeedback(kind, html) {
+        if (!feedback) return;
+        feedback.className = `alert alert-${kind} py-2 small mt-2 mb-0`;
+        feedback.innerHTML = html;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     // --- Helper Function to Update Form ---
-    function updateFormFields(data) {
-        console.log("Updating form with data:", data);
-        let updatedFields = 0;
+    const FIELDS = {
+        preferred_department: { id: 'id_preferred_department', label: 'Department' },
+        height_cm: { id: 'id_height_cm', label: 'Height', suffix: ' cm' },
+        weight_kg: { id: 'id_weight_kg', label: 'Weight', suffix: ' kg' },
+        age_group: { id: 'id_age_group', label: 'Age group' },
+        preferred_fit: { id: 'id_preferred_fit', label: 'Fit' },
+    };
 
-        const fieldMap = {
-            'preferred_department': 'id_preferred_department',
-            'height_cm': 'id_height_cm',
-            'weight_kg': 'id_weight_kg',
-            'age_group': 'id_age_group',
-            'preferred_fit': 'id_preferred_fit',
-            'budget_min': 'id_budget_min',
-            'budget_max': 'id_budget_max'
-        };
+    function setFieldValue(element, value) {
+        // A <select> silently ignores values that aren't one of its options, so check first.
+        if (element.tagName === 'SELECT' &&
+            !Array.from(element.options).some(opt => opt.value === String(value))) {
+            return false;
+        }
+        element.value = value;
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.classList.add('is-valid');
+        setTimeout(() => element.classList.remove('is-valid'), 3000);
+        return true;
+    }
 
-        for (const key in data) {
-            if (data.hasOwnProperty(key) && fieldMap.hasOwnProperty(key)) {
-                const fieldId = fieldMap[key];
-                const fieldElement = document.getElementById(fieldId);
-                if (fieldElement && data[key] !== null && data[key] !== undefined) {
-                    fieldElement.value = data[key];
-                    updatedFields++;
-                    fieldElement.classList.add('is-valid');
-                    setTimeout(() => fieldElement.classList.remove('is-valid'), 3000);
-                }
+    function updateFormFields(data, sourceText) {
+        const filled = [];
+        for (const [key, field] of Object.entries(FIELDS)) {
+            if (data[key] === undefined || data[key] === null) continue;
+            const element = document.getElementById(field.id);
+            if (element && setFieldValue(element, data[key])) {
+                filled.push(`<strong>${field.label}:</strong> ${escapeHtml(String(data[key]))}${field.suffix || ''}`);
             }
         }
-        if (updatedFields > 0) {
-            alert(`${updatedFields} profile field(s) updated based on your input. Please review and save.`);
+        if (filled.length) {
+            showFeedback('success',
+                `Filled ${filled.length} field${filled.length > 1 ? 's' : ''}: ${filled.join(' &middot; ')}. ` +
+                'Review them and click <strong>Save Profile</strong>.');
         } else {
-            alert("Could not automatically update fields based on your input. Please fill them manually.");
+            showFeedback('warning',
+                `Couldn't find profile details in “${escapeHtml(sourceText)}”. ` +
+                'Try something like “I am a man, 5 feet 8 inches, 70 kg, 25 years old, slim fit”.');
         }
     }
 
@@ -64,22 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ text: text })
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || result.status !== 'success') {
+                throw new Error(result.message || `Server error (${response.status})`);
             }
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                updateFormFields(result.data);
-            } else {
-                console.error("API Error:", result.message);
-                alert(`Error processing input: ${result.message}`);
-            }
+            updateFormFields(result.data || {}, text);
         } catch (error) {
-            console.error('Fetch Error:', error);
-            alert(`An error occurred: ${error.message}`);
+            console.error('Preference processing failed:', error);
+            showFeedback('danger', `Couldn't process your input: ${escapeHtml(error.message)}`);
         } finally {
             voiceStatus.textContent = '';
         }
@@ -92,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             voiceStatus.textContent = 'Processing text...';
             sendDataToApi(text);
         } else {
-            alert('Please enter your preferences in the text box.');
+            showFeedback('warning', 'Type or speak your preferences first.');
         }
     });
 

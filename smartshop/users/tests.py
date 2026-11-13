@@ -140,6 +140,85 @@ class UsernameRecoveryTests(TestCase):
         self.assertIn('alice', mail.outbox[0].body)
 
 
+class PreferenceExtractionTests(TestCase):
+    """Sentences as produced by browser speech recognition."""
+
+    def check(self, text, expected):
+        from .nlp_utils import extract_preferences_from_text
+        self.assertEqual(extract_preferences_from_text(text), expected, msg=text)
+
+    def test_full_sentence(self):
+        self.check('I am a man 5 feet 8 inches tall weighing 70 kg and I am 25 years old I like slim fit',
+                   {'preferred_department': 'Men', 'height_cm': 173, 'weight_kg': 70,
+                    'age_group': '25-34', 'preferred_fit': 'slim'})
+
+    def test_centimetres_not_mistaken_for_metres(self):
+        self.check('my height is 175 cm and weight is 68 kilograms', {'height_cm': 175, 'weight_kg': 68})
+        self.check('female 160 centimeters loose fit',
+                   {'preferred_department': 'Women', 'height_cm': 160, 'preferred_fit': 'loose'})
+
+    def test_number_words(self):
+        self.check('I am six feet tall and weigh seventy kilos', {'height_cm': 183, 'weight_kg': 70})
+        self.check('five feet eleven inches and seventy two kilos', {'height_cm': 180, 'weight_kg': 72})
+
+    def test_feet_formats(self):
+        self.check('I am 5 foot 10', {'height_cm': 178})
+        self.check('height 5.8 feet', {'height_cm': 173})       # Indian style: 5 ft 8 in
+        self.check('I\'m 5\'8" and 65 kg', {'height_cm': 173, 'weight_kg': 65})
+        self.check('I am 1.75 meters tall', {'height_cm': 175})
+
+    def test_age_is_not_read_as_height(self):
+        self.check('I am a woman aged 30 with relaxed fit',
+                   {'preferred_department': 'Women', 'age_group': '25-34', 'preferred_fit': 'relaxed'})
+        self.check('I am 22 my weight is 55 kg', {'weight_kg': 55, 'age_group': '18-24'})
+
+    def test_department_variants_and_first_mention_wins(self):
+        self.check('I prefer the mens department', {'preferred_department': 'Men'})
+        self.check('I am a man shopping for women', {'preferred_department': 'Men'})
+
+    def test_pounds(self):
+        self.check('I weigh 150 pounds and I am 5 ft 6 in', {'height_cm': 168, 'weight_kg': 68})
+
+    def test_nothing_recognised(self):
+        self.check('hello there', {})
+
+
+class PreferenceApiTests(TestCase):
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(username='u', mobile_number='1', password='Pass-word-123')
+        self.url = reverse('process_preferences')
+
+    def test_requires_login(self):
+        resp = self.client.post(self.url, '{"text": "man"}', content_type='application/json')
+        self.assertEqual(resp.status_code, 302)
+
+    def test_csrf_enforced(self):
+        from django.test import Client
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        resp = client.post(self.url, '{"text": "man"}', content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_extracts_and_validates(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(self.url, '{"text": "I am a man, 6 feet, 80 kg"}', content_type='application/json')
+        self.assertEqual(resp.json(), {'status': 'success', 'data': {
+            'preferred_department': 'Men', 'height_cm': 183, 'weight_kg': 80}})
+        self.assertEqual(self.client.post(self.url, '{}', content_type='application/json').status_code, 400)
+        self.assertEqual(self.client.post(self.url, 'not json', content_type='application/json').status_code, 400)
+
+    def test_profile_page_renders_saved_values(self):
+        self.user.profile.height_cm = 173
+        self.user.profile.preferred_fit = 'slim'
+        self.user.profile.save()
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('profile'))
+        self.assertContains(resp, 'id="id_height_cm"')
+        self.assertContains(resp, 'value="173"')
+        self.assertContains(resp, '<option value="slim" selected>')
+        self.assertContains(resp, 'id="preference-feedback"')
+
+
 class OtpHelperTests(TestCase):
     def test_generate_is_six_digits(self):
         for _ in range(50):

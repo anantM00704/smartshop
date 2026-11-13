@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
                 },
                 body: JSON.stringify({ text: text })
             });
@@ -135,50 +136,5 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         voiceInputBtn.disabled = true;
         voiceStatus.textContent = 'Voice recognition not supported by your browser.';
-    }
-});
-
-async function sendDataToApi(text) {
-    try {
-        const csrfToken = getCSRFToken();
-        if (!csrfToken) {
-            throw new Error('CSRF token not found. Ensure you are logged in and CSRF cookies are set.');
-        }
-
-        const response = await fetch(processApiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken, // Include CSRF token in the headers
-            },
-            body: JSON.stringify({ text: text })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.status === 'success') {
-            updateFormFields(result.data);
-        } else {
-            alert(`Error processing input: ${result.message}`);
-        }
-    } catch (error) {
-        console.error('Fetch Error:', error);
-        alert(`An error occurred: ${error.message}`);
-    } finally {
-        voiceStatus.textContent = '';
-    }
-}
-
-processTextBtn.addEventListener('click', () => {
-    const text = preferenceInput.value.trim();
-    if (text) {
-        voiceStatus.textContent = 'Processing text...';
-        sendDataToApi(text);
-    } else {
-        alert('Please enter your preferences in the text box.');
     }
 });

@@ -13,7 +13,7 @@ urlpatterns = [
     path('forgot_username/', views.forgot_username, name='forgot_username'),
     path('password_reset_mobile_verify/', views.password_reset_mobile_verify, name='password_reset_mobile_verify'),
     path('password_reset_mobile_set_new_password/', views.password_reset_mobile_set_new_password, name='password_reset_mobile_set_new_password'),
-    path('edit-profile/', views.edit_profile, name='profile'),
+    path('edit-profile/', views.edit_profile, name='edit_profile'),
     path('profile/', views.profile, name='profile'),
     path('api/process-preferences/', views.process_preference_input, name='process_preferences'),
 

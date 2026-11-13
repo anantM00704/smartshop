@@ -1,69 +1,63 @@
 {% extends "base.html" %}
-{% load static %}
 
 {% block title %}Dashboard - SmartShop{% endblock %}
 
 {% block content %}
-    {# This template inherits the navbar and category bar from base.html #}
-    {# Only dashboard-specific content goes below #}
-
     <!-- Main Banner -->
-    <div class="row mb-4"> {# Added bottom margin #}
+    <div class="row mb-4">
         <div class="col-12">
-            <div class="p-4 p-md-5 rounded bg-primary text-white text-center shadow-sm"> {# Added padding, shadow #}
-                <h2 class="display-6 fw-bold">One dashboard, many benefits</h2> {# Made text bolder #}
-                <p class="lead col-md-8 mx-auto">See the best quality product recommendations tailored to your budget and get the fastest delivery options!</p> {# Centered paragraph #}
-                <a href="#" class="btn btn-warning btn-lg mt-3">Explore Top Picks</a> {# Added margin #}
+            <div class="p-4 p-md-5 rounded bg-primary text-white text-center shadow-sm">
+                <h2 class="display-6 fw-bold">One dashboard, many benefits</h2>
+                <p class="lead col-md-8 mx-auto">See the best quality product recommendations tailored to your budget and get the fastest delivery options!</p>
+                <a href="#top-picks" class="btn btn-warning btn-lg mt-3">Explore Top Picks</a>
             </div>
         </div>
     </div>
 
-    <!-- Recommendation Sections -->
-    <div class="row g-3"> {# g-3 provides gap between columns #}
-
-        <!-- Pick Up Where You Left Off -->
-        <h2 class="fw-bold">Pick Up Where You Left Off</h2>
+    <!-- Pick Up Where You Left Off -->
+    <section class="mb-5">
+        <h3 class="fw-bold mb-1">Pick Up Where You Left Off</h3>
+        {% if recent_queries %}
+            <p class="text-muted small mb-3">Based on your recent searches:
+                {% for q in recent_queries %}<a href="{% url 'search_results' %}?q={{ q|urlencode }}" class="badge rounded-pill text-bg-secondary text-decoration-none me-1">{{ q }}</a>{% endfor %}
+            </p>
+        {% endif %}
         {% if pick_up_products %}
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="row row-cols-1 row-cols-md-3 g-4">
-                    {% for product in pick_up_products %}
-                        <div class="col">
-                            <div class="card h-100">
-                                <img src="{{ product.image_url|default:'/static/images/placeholder.png' }}" class="card-img-top" alt="{{ product.name }}">
-                                <div class="card-body">
-                                    <h5 class="card-title">{{ product.name }}</h5>
-                                    <p class="card-text">₹{{ product.price }}</p>
-                                    <a href="{{ product.product_url }}" class="btn btn-primary" target="_blank">View Product</a>
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
+            <div class="row row-cols-2 row-cols-md-3 row-cols-lg-6 g-3">
+                {% for product in pick_up_products %}
+                    <div class="col">{% include "products/_product_card.html" %}</div>
+                {% endfor %}
             </div>
-        </div>
         {% else %}
-        <p class="text-muted">No recent activity found.</p>
+            <p class="text-muted">No recent activity yet. Try searching for something!</p>
         {% endif %}
+    </section>
 
-        <!-- Categories to Explore -->
-        <h2 class="fw-bold">Categories to Explore</h2>
+    <!-- Categories to Explore -->
+    <section class="mb-5">
+        <h3 class="fw-bold mb-3">Categories to Explore</h3>
         {% if categories_to_explore %}
-        <div class="row mb-4">
-            <div class="col-12">
-                <ul>
-                    {% for cat in categories_to_explore %}
-                        <li>{{ cat.name }}</li>
-                    {% endfor %}
-                </ul>
+            <div class="d-flex flex-wrap gap-2">
+                {% for cat in categories_to_explore %}
+                    <a href="{% url 'search_results' %}?category={{ cat.name|urlencode }}" class="btn btn-outline-dark rounded-pill">
+                        {{ cat.name }} <span class="badge text-bg-light ms-1">{{ cat.n }}</span>
+                    </a>
+                {% endfor %}
             </div>
-        </div>
         {% else %}
-        <p class="text-muted">No recommendations available.</p>
+            <p class="text-muted">No recommendations available.</p>
         {% endif %}
-    </div>
-{% endblock %}
+    </section>
 
-{% block extra_js %}
-    {# Add any JavaScript specific ONLY to the dashboard page if needed #}
+    <!-- Top picks -->
+    {% if recommended_products %}
+    <section class="mb-5" id="top-picks">
+        <h3 class="fw-bold mb-3">Top Picks For You</h3>
+        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-6 g-3">
+            {% for product in recommended_products %}
+                <div class="col">{% include "products/_product_card.html" %}</div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
 {% endblock %}

@@ -22,7 +22,6 @@ from .forms import SignUpForm, ProfileUpdateForm
 from django.contrib.auth.decorators import login_required
 from .forms import ProfileUpdateForm
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt 
 from django.views.decorators.http import require_POST
 from .nlp_utils import extract_preferences_from_text
 
@@ -160,7 +159,7 @@ def edit_profile(request):
         form = ProfileUpdateForm(request.POST, instance=request.user.profile)
         if form.is_valid():
             form.save()
-            print(form.cleaned_data)
+            messages.success(request, 'Your profile has been updated successfully!')
             return redirect('profile')
     else:
         form = ProfileUpdateForm(instance=request.user.profile)
@@ -186,14 +185,10 @@ def profile(request):
     return render(request, 'registration/profile.html', context)
 
 
-        
-@csrf_exempt
 @login_required
+@require_POST
 def process_preference_input(request):
     """API endpoint to process text/voice input and return extracted data."""
-    import json
-    from .nlp_utils import extract_preferences_from_text
-
     try:
         body = json.loads(request.body)
         text_input = body.get('text', '')
@@ -208,5 +203,6 @@ def process_preference_input(request):
 
     except json.JSONDecodeError:
         return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'An error occurred: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception("Preference extraction failed")
+        return JsonResponse({'status': 'error', 'message': 'Could not process your input.'}, status=500)

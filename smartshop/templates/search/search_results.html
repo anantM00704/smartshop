@@ -1,157 +1,100 @@
-<!-- filepath: c:\Users\anant\IR_project\smartshop\templates\search\search_results.html -->
 {% extends "base.html" %}
-{% load static %}
 
-{% block title %}
-    {% if query %}Search results for "{{ query }}"{% else %}All Products{% endif %}
-{% endblock %}
+{% block title %}{% if query %}Search results for "{{ query }}"{% else %}All Products{% endif %} - SmartShop{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
   <div class="row">
     <!-- Sidebar -->
-    <div class="col-md-3 mb-4">
-      <div>
-        <strong>All Categories</strong>
-        <ul class="list-unstyled">
-          {% for main_cat in categories %}
-            <li>
-              <a href="{% url 'search_results' %}?category={{ main_cat.name|urlencode }}"><strong>{{ main_cat.name }}</strong></a>
-              {% if main_cat.subcategories.all %}
-                <ul>
-                  {% for subcat in main_cat.subcategories.all %}
-                    <li>
-                      <a href="{% url 'search_results' %}?category={{ subcat.name|urlencode }}">{{ subcat.name }}</a>
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      </div>
+    <aside class="col-md-3 mb-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-bold">All Categories</h6>
+          <ul class="list-unstyled mb-0">
+            {% for main_cat in categories %}
+              <li class="mb-2">
+                <a href="{% url 'search_results' %}?category={{ main_cat.name|urlencode }}" class="fw-semibold text-decoration-none{% if category_name == main_cat.name %} text-primary{% else %} text-dark{% endif %}">{{ main_cat.name }}</a>
+                {% if main_cat.subcategories.all %}
+                  <ul class="list-unstyled ms-3 small">
+                    {% for subcat in main_cat.subcategories.all %}
+                      <li><a href="{% url 'search_results' %}?category={{ subcat.name|urlencode }}" class="text-decoration-none{% if category_name == subcat.name %} text-primary fw-semibold{% else %} text-secondary{% endif %}">{{ subcat.name }}</a></li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
 
-      <!-- Price Filters -->
-      <div class="mt-4">
-        <strong>Filter by Price</strong>
-        <form method="get" action="{% url 'search_results' %}">
-          <div class="mb-2">
-            <label for="min_price" class="form-label">Min Price</label>
-            <input type="number" name="min_price" id="min_price" class="form-control" value="{{ min_price|default:'' }}" placeholder="0">
-          </div>
-          <div class="mb-2">
-            <label for="max_price" class="form-label">Max Price</label>
-            <input type="number" name="max_price" id="max_price" class="form-control" value="{{ max_price|default:'' }}" placeholder="10000">
-          </div>
-          <button type="submit" class="btn btn-primary w-100">Apply</button>
-        </form>
+          <hr>
+          <h6 class="fw-bold">Filter by Price</h6>
+          <form method="get" action="{% url 'search_results' %}">
+            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+            {% if category_name %}<input type="hidden" name="category" value="{{ category_name }}">{% endif %}
+            {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+            <div class="row g-2 mb-2">
+              <div class="col"><input type="number" min="0" name="min_price" class="form-control form-control-sm" value="{{ min_price }}" placeholder="Min ₹" aria-label="Minimum price"></div>
+              <div class="col"><input type="number" min="0" name="max_price" class="form-control form-control-sm" value="{{ max_price }}" placeholder="Max ₹" aria-label="Maximum price"></div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Apply</button>
+            {% if min_price or max_price %}
+              <a href="{% url 'search_results' %}?{% if query %}q={{ query|urlencode }}&{% endif %}{% if category_name %}category={{ category_name|urlencode }}{% endif %}" class="btn btn-link btn-sm w-100">Clear price filter</a>
+            {% endif %}
+          </form>
+        </div>
       </div>
-    </div>
+    </aside>
 
     <!-- Main Content -->
-    <div class="col-md-9">
-      <h2>
-        {% if query %}
-          Search results for "{{ query }}"
-        {% elif category_name %}
-          Browse: {{ category_name }}
-        {% else %}
-          All Products
-        {% endif %}
-      </h2>
-      <p class="text-muted">{{ count }} product{{ count|pluralize }} found</p>
-      <div class="row row-cols-1 row-cols-md-3 g-4">
+    <section class="col-md-9">
+      <div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
+        <div>
+          <h4 class="mb-0">
+            {% if query %}Search results for "{{ query }}"{% elif category_name %}{{ category_name }}{% else %}All Products{% endif %}
+          </h4>
+          <small class="text-muted">{{ count }} product{{ count|pluralize }} found</small>
+        </div>
+        <form method="get" action="{% url 'search_results' %}" class="d-flex align-items-center gap-2">
+          {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+          {% if category_name %}<input type="hidden" name="category" value="{{ category_name }}">{% endif %}
+          {% if min_price %}<input type="hidden" name="min_price" value="{{ min_price }}">{% endif %}
+          {% if max_price %}<input type="hidden" name="max_price" value="{{ max_price }}">{% endif %}
+          <label for="sort" class="small text-muted text-nowrap">Sort by</label>
+          <select name="sort" id="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="" {% if not sort %}selected{% endif %}>Relevance</option>
+            <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Price: Low to High</option>
+            <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>Price: High to Low</option>
+          </select>
+        </form>
+      </div>
+
+      <div class="row row-cols-2 row-cols-md-3 g-3">
         {% for product in products %}
-          <div class="col">
-            <div class="card h-100">
-              <a href="{{ product.product_url|default:'#' }}" target="_blank">
-                {% if product.image_url %}
-                  <img src="{{ product.image_url }}" class="card-img-top p-3" alt="{{ product.name }}" style="height: 200px; object-fit: contain;">
-                {% endif %}
-              </a>
-              <div class="card-body d-flex flex-column">
-                <h5 class="card-title">{{ product.name|truncatechars:50 }}</h5>
-                <p class="card-text fw-bold">
-                  {% if product.price %}₹{{ product.price|floatformat:0 }}{% else %}Not Available{% endif %}
-                </p>
-                <p class="card-text text-success">
-                  <small>
-                    {% if product.delivery_date %}
-                      {{ product.delivery_date }}
-                    {% else %}
-                      Delivery info N/A
-                    {% endif %}
-                  </small>
-                </p>
-                <div class="mt-auto">
-                  <a href="{{ product.product_url|default:'#' }}" class="btn btn-primary mb-2" target="_blank">
-                    View{% if product.source_site and product.source_site != "Unknown" %} on {{ product.source_site }}{% endif %}
-                  </a>
-                  <!-- Order form for this product -->
-                  <form method="post" action="{% url 'place_order' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="product_id" value="{{ product.id }}">
-                    <input type="text" name="address" class="form-control mb-2" placeholder="Enter address" required>
-                    <button type="submit" class="btn btn-success w-100">Place Order</button>
-                  </form>
-                  <!-- Debug: Show product ID -->
-                  <small class="text-muted">Product ID: {{ product.id }}</small>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div class="col">{% include "products/_product_card.html" with show_order=True %}</div>
         {% empty %}
           <div class="col-12">
-            <p class="text-center my-5">No products found matching your criteria.</p>
+            <p class="text-center text-muted my-5">No products found matching your criteria.</p>
           </div>
         {% endfor %}
       </div>
-    </div>
+
+      {% if page.has_other_pages %}
+        <nav class="mt-4" aria-label="Search results pages">
+          <ul class="pagination justify-content-center">
+            {% if page.has_previous %}
+              <li class="page-item"><a class="page-link" href="?{{ querystring }}{% if querystring %}&{% endif %}page={{ page.previous_page_number }}">Previous</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+            <li class="page-item disabled"><span class="page-link">Page {{ page.number }} of {{ page.paginator.num_pages }}</span></li>
+            {% if page.has_next %}
+              <li class="page-item"><a class="page-link" href="?{{ querystring }}{% if querystring %}&{% endif %}page={{ page.next_page_number }}">Next</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Next</span></li>
+            {% endif %}
+          </ul>
+        </nav>
+      {% endif %}
+    </section>
   </div>
 </div>
 {% endblock %}
-<script>
-    const searchInput = document.querySelector('input[name="q"]');
-    const suggestionsBox = document.createElement('div');
-    suggestionsBox.style.position = 'absolute';
-    suggestionsBox.style.backgroundColor = 'white';
-    suggestionsBox.style.border = '1px solid #ccc';
-    suggestionsBox.style.zIndex = '1000';
-    searchInput.parentNode.appendChild(suggestionsBox);
-
-    searchInput.addEventListener('input', async () => {
-        const query = searchInput.value.trim();
-        if (query.length > 0) {
-            const response = await fetch(`/autocomplete/?q=${query}`);
-            const data = await response.json();
-            suggestionsBox.innerHTML = '';
-            data.suggestions.forEach(suggestion => {
-                const suggestionItem = document.createElement('div');
-                suggestionItem.textContent = suggestion;
-                suggestionItem.style.padding = '5px';
-                suggestionItem.style.cursor = 'pointer';
-                suggestionItem.addEventListener('click', () => {
-                    searchInput.value = suggestion;
-                    suggestionsBox.innerHTML = '';
-                });
-                suggestionsBox.appendChild(suggestionItem);
-            });
-        } else {
-            suggestionsBox.innerHTML = '';
-        }
-        <sc>
-          
-          const placeOrderModal = document.getElementById('placeOrderModal');
-          placeOrderModal.addEventListener('show.bs.modal', function (event) {
-              const button = event.relatedTarget; // Button that triggered the modal
-              const productId = button.getAttribute('data-product-id'); // Extract product ID
-              const productName = button.getAttribute('data-product-name'); // Extract product name
-      
-              // Set the product ID and name in the modal
-              document.getElementById('product-id').value = productId;
-              document.getElementById('product-name').textContent = productName;
-    });
-    
-  });
-    
-</script>

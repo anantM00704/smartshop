@@ -1,43 +1,56 @@
-from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from recommendation.models import SearchHistory
-from products.models import Product, Category
 from django.db.models import Count, Q
+from django.shortcuts import render
+
+from products.models import Category, Product
+from recommendation.models import SearchHistory
+
+MAX_RECENT_PRODUCTS = 6
+MAX_RECOMMENDED_PRODUCTS = 6
+
+
+def _products_matching(queries, limit):
+    """Products whose name or category contains any of the given search queries."""
+    condition = Q()
+    for q in queries:
+        condition |= Q(name__icontains=q) | Q(category__name__icontains=q)
+    if not condition:
+        return Product.objects.none()
+    return Product.objects.filter(condition).select_related('category').distinct()[:limit]
+
 
 @login_required
 def dashboard(request):
-    # Fetch the user's most recent searches
-    recent_queries = (
-        SearchHistory.objects.filter(user=request.user)
-        .order_by('-searched_at')
-        .values_list('query', flat=True)[:5]
+    history = SearchHistory.objects.filter(user=request.user)
+
+    # Distinct recent queries, newest first.
+    recent_queries = []
+    for q in history.order_by('-searched_at').values_list('query', flat=True)[:50]:
+        if q.lower() not in (r.lower() for r in recent_queries):
+            recent_queries.append(q)
+        if len(recent_queries) == 5:
+            break
+
+    pick_up_products = list(_products_matching(recent_queries, MAX_RECENT_PRODUCTS))
+
+    # Categories the user engaged with, most frequent first; fall back to the largest categories.
+    category_ids = [p.category_id for p in pick_up_products if p.category_id]
+    categories_to_explore = list(
+        Category.objects.filter(id__in=category_ids).annotate(n=Count('products')).order_by('-n')[:6]
+    ) or list(
+        Category.objects.filter(parent__isnull=False).annotate(n=Count('products')).order_by('-n')[:6]
     )
 
-    # Fetch products based on the most recent searches
-    recent_products = Product.objects.filter(
-        Q(name__in=recent_queries)
-    ).distinct()
-
-    # Recommend products based on the most searched queries
-    most_searched_queries = (
-        SearchHistory.objects.filter(user=request.user)
-        .values('query')
-        .annotate(search_count=Count('query'))
-        .order_by('-search_count')[:5]
+    recommended_products = list(
+        Product.objects.filter(category__in=categories_to_explore, price__isnull=False)
+        .exclude(id__in=[p.id for p in pick_up_products])
+        .select_related('category')
+        .order_by('?')[:MAX_RECOMMENDED_PRODUCTS]
     )
-    recommended_categories = Category.objects.filter(
-        products__name__in=[query['query'] for query in most_searched_queries]
-    ).distinct()
 
-    # Separate distinct and slicing for recommended products
-    recommended_products_queryset = Product.objects.filter(
-        category__in=recommended_categories
-    ).exclude(id__in=recent_products.values_list('id', flat=True)).distinct()
-
-    recommended_products = list(recommended_products_queryset[:10])  # Convert to a list after slicing
-
-    context = {
-        'recent_products': recent_products,
+    return render(request, 'dashboard/dashboard.html', {
+        'pick_up_products': pick_up_products,
+        'categories_to_explore': categories_to_explore,
         'recommended_products': recommended_products,
-    }
-    return render(request, 'dashboard/dashboard.html', context)
+        'recent_queries': recent_queries,
+    })

@@ -1,21 +1,17 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 from .models import Order
 from products.models import Product
 
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from .models import Order
-from products.models import Product
 
+@login_required
+@require_POST
 def place_order(request):
     if request.method == 'POST':
         product_id = request.POST.get('product_id')
-        address = request.POST.get('address')
-
-        # Debugging: Print the product_id to the console
-        print(f"Received product_id: {product_id}")
+        address = (request.POST.get('address') or '').strip()
 
         if not product_id:
             messages.error(request, "Invalid product selected.")

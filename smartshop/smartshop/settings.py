@@ -16,17 +16,34 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load variables from a .env file (repo root or smartshop/) if python-dotenv is installed.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR.parent / '.env')
+    load_dotenv(BASE_DIR / '.env')
+except ImportError:
+    pass
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'REMOVED_SECRET'
+def _env_bool(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in ('1', 'true', 'yes', 'on')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+DEBUG = _env_bool('DJANGO_DEBUG', False)
+
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        # Dev-only fallback; never used when DEBUG is off.
+        SECRET_KEY = 'dev-only-insecure-key-change-me'
+    else:
+        raise RuntimeError('DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is not true')
+
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
 
 
 # Application definition
@@ -145,22 +162,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'f20220182@pilani.bits-pilani.ac.in'
-EMAIL_HOST_PASSWORD = 'REMOVED_SECRET'
-
-LOGIN_REDIRECT_URL = '/dashboard/'
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+# Without SMTP credentials, print emails to the console instead of failing.
+EMAIL_BACKEND = (
+    'django.core.mail.backends.smtp.EmailBackend'
+    if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD
+    else 'django.core.mail.backends.console.EmailBackend'
+)
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Default
 SESSION_COOKIE_AGE = 1200  # 20 minutes
 
-AUTH_USER_MODEL = 'users.CustomUser'
-
 # Redirect to the dashboard after login
-LOGIN_REDIRECT_URL = '/dashboard/'  
+LOGIN_REDIRECT_URL = '/dashboard/'
 
 LOGIN_URL = '/accounts/login/'
 

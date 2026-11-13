@@ -28,7 +28,10 @@ def sign_up(request):
         form = SignUpForm(request.POST)
         if form.is_valid():
             user = form.save()
-            Profile.objects.create(user=user, mobile_number=form.cleaned_data['mobile_number'])  # Create a profile for the new user
+            # The post_save signal in users/models.py already created the profile.
+            profile = user.profile
+            profile.mobile_number = form.cleaned_data['mobile_number']
+            profile.save(update_fields=['mobile_number'])
             return redirect('login')  # Redirect to login after sign up
     else:
         form = SignUpForm()

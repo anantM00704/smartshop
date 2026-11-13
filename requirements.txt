@@ -1,0 +1,7 @@
+Django==5.0.6
+django-crispy-forms
+crispy-bootstrap5
+fuzzywuzzy
+python-Levenshtein
+pandas
+python-dotenv

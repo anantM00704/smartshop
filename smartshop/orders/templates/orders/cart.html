@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Your cart - SmartShop{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h3 class="mb-3">Your cart {% if cart.count %}<small class="text-muted fs-6">({{ cart.count }} item{{ cart.count|pluralize }})</small>{% endif %}</h3>
+
+  {% if not cart.items %}
+    <div class="text-center text-muted border rounded py-5">
+      <i class="bi bi-cart3 fs-1"></i>
+      <p class="mt-2 mb-3">Your cart is empty.</p>
+      <a href="{% url 'search_results' %}" class="btn btn-primary">Browse products</a>
+    </div>
+  {% else %}
+  <div class="row g-4">
+    <!-- Items -->
+    <div class="col-lg-7">
+      <div class="list-group shadow-sm">
+        {% for item in cart.items %}
+          <div class="list-group-item py-3">
+            <div class="d-flex gap-3">
+              <div class="flex-shrink-0 bg-light rounded d-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
+                {% if item.product.image_url %}
+                  <img src="{{ item.product.image_url }}" alt="" style="max-width: 64px; max-height: 64px; object-fit: contain;">
+                {% else %}<i class="bi bi-bag fs-3 text-secondary"></i>{% endif %}
+              </div>
+              <div class="flex-grow-1">
+                <div class="fw-semibold" title="{{ item.product.name }}">{{ item.product.name|truncatechars:80 }}</div>
+                <div class="small text-muted mb-2">
+                  {% if item.product.source_site and item.product.source_site != 'Unknown' %}Sold on {{ item.product.source_site }} &middot; {% endif %}
+                  {{ item.product.delivery_date|default:"Delivery date shown at checkout" }}
+                </div>
+                {% if item in cart.unavailable %}
+                  <span class="badge text-bg-danger">Currently unavailable</span>
+                {% endif %}
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <form method="post" action="{% url 'cart_update' item.id %}" class="d-flex align-items-center gap-1">
+                    {% csrf_token %}
+                    <label for="qty-{{ item.id }}" class="small text-muted">Qty</label>
+                    <select id="qty-{{ item.id }}" name="quantity" class="form-select form-select-sm" style="width: 72px;" onchange="this.form.submit()">
+                      {% for n in "123456789"|make_list %}<option value="{{ n }}" {% if item.quantity|stringformat:"s" == n %}selected{% endif %}>{{ n }}</option>{% endfor %}
+                      <option value="10" {% if item.quantity == 10 %}selected{% endif %}>10</option>
+                    </select>
+                    <noscript><button class="btn btn-sm btn-outline-secondary">Update</button></noscript>
+                  </form>
+                  <form method="post" action="{% url 'cart_remove' item.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none">Remove</button>
+                  </form>
+                </div>
+              </div>
+              <div class="text-end fw-bold text-nowrap">
+                {% if item.product.price %}₹{{ item.line_total|floatformat:0 }}
+                  {% if item.quantity > 1 %}<div class="small text-muted fw-normal">₹{{ item.product.price|floatformat:0 }} each</div>{% endif %}
+                {% else %}—{% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Deliver to + summary -->
+    <div class="col-lg-5">
+      <form method="post" action="{% url 'checkout' %}" class="card shadow-sm">
+        {% csrf_token %}
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Deliver to</h6>
+            <a href="{% url 'address_add' %}?next={% url 'cart' %}" class="small">+ Add new address</a>
+          </div>
+
+          {% if addresses %}
+            <div class="list-group mb-2">
+              {% for address in addresses %}
+                <label class="list-group-item d-flex gap-2">
+                  <input class="form-check-input flex-shrink-0 mt-1" type="radio" name="address_id" value="{{ address.id }}"
+                         {% if forloop.first %}checked{% endif %} required>
+                  <span class="small">
+                    <strong>{{ address.full_name }}</strong>
+                    <span class="badge text-bg-light text-uppercase ms-1">{{ address.get_label_display }}</span>
+                    {% if address.is_default %}<span class="badge text-bg-primary ms-1">Default</span>{% endif %}<br>
+                    {{ address.street }}, {{ address.city }}, {{ address.state }} - {{ address.pincode }}<br>
+                    <span class="text-muted">{{ address.phone }}</span>
+                  </span>
+                </label>
+              {% endfor %}
+            </div>
+            {% if address_total > checkout_limit %}
+              <a href="{% url 'address_list' %}" class="small">View all {{ address_total }} saved addresses</a>
+            {% else %}
+              <a href="{% url 'address_list' %}" class="small">Manage saved addresses</a>
+            {% endif %}
+          {% else %}
+            <div class="alert alert-warning small mb-0">
+              Add a delivery address to place your order.
+              <a href="{% url 'address_add' %}?next={% url 'cart' %}" class="alert-link">Add address</a>
+            </div>
+          {% endif %}
+
+          <hr>
+          <div class="d-flex justify-content-between"><span>Items ({{ cart.count }})</span><span>₹{{ cart.subtotal|floatformat:0 }}</span></div>
+          <div class="d-flex justify-content-between text-success small"><span>Delivery</span><span>Free</span></div>
+          <div class="d-flex justify-content-between fw-bold fs-5 mt-2"><span>Total</span><span>₹{{ cart.subtotal|floatformat:0 }}</span></div>
+          {% if cart.unavailable %}
+            <div class="alert alert-danger small mt-3 mb-0">Remove unavailable items to place your order.</div>
+          {% endif %}
+          <button type="submit" class="btn btn-warning w-100 mt-3 fw-semibold"
+                  {% if not addresses or cart.unavailable %}disabled{% endif %}>Place order</button>
+          <p class="small text-muted text-center mt-2 mb-0">Payment is not enabled yet; orders are placed directly.</p>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

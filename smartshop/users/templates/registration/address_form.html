@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}{% if editing %}Edit{% else %}Add{% endif %} address - SmartShop{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  {% include "registration/_profile_nav.html" with active='addresses' %}
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <h4 class="mb-4">{% if editing %}Edit address{% else %}Add a new address{% endif %}</h4>
+          <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            {{ form.non_field_errors }}
+            <div class="row">
+              <div class="col-md-4">{{ form.label|as_crispy_field }}</div>
+              <div class="col-md-8">{{ form.full_name|as_crispy_field }}</div>
+            </div>
+            {{ form.phone|as_crispy_field }}
+            {{ form.line1|as_crispy_field }}
+            {{ form.line2|as_crispy_field }}
+            <div class="row">
+              <div class="col-md-5">{{ form.city|as_crispy_field }}</div>
+              <div class="col-md-4">{{ form.state|as_crispy_field }}</div>
+              <div class="col-md-3">{{ form.pincode|as_crispy_field }}</div>
+            </div>
+            {{ form.is_default|as_crispy_field }}
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary">Save address</button>
+              <a href="{% if next %}{{ next }}{% else %}{% url 'address_list' %}{% endif %}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

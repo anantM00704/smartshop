@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 import datetime
@@ -43,6 +45,49 @@ class Profile(models.Model):
     def __str__(self):
         return f'{self.user.username} Profile'
     
+class Address(models.Model):
+    """A saved delivery address. A user may keep several; exactly one can be the default."""
+    MAX_PER_USER = 20          # hard cap on stored addresses
+    CHECKOUT_LIMIT = 5         # how many the cart/checkout shows before "View all"
+
+    LABEL_CHOICES = [('home', 'Home'), ('work', 'Work'), ('other', 'Other')]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='addresses')
+    label = models.CharField(max_length=10, choices=LABEL_CHOICES, default='home')
+    full_name = models.CharField('Full name', max_length=100)
+    phone = models.CharField('Mobile number', max_length=15, validators=[
+        RegexValidator(r'^\+?\d{10,14}$', 'Enter a valid mobile number (10 to 14 digits).')])
+    line1 = models.CharField('Flat, house no., building', max_length=200)
+    line2 = models.CharField('Area, street, landmark', max_length=200, blank=True)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    pincode = models.CharField('PIN code', max_length=6, validators=[
+        RegexValidator(r'^[1-9]\d{5}$', 'Enter a valid 6-digit PIN code.')])
+    is_default = models.BooleanField('Use as default address', default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-is_default', '-updated_at']
+        verbose_name_plural = 'Addresses'
+        constraints = [
+            models.UniqueConstraint(fields=['user'], condition=Q(is_default=True),
+                                    name='one_default_address_per_user'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_label_display()}: {self.full_name}, {self.city}'
+
+    @property
+    def street(self):
+        return ', '.join(part for part in (self.line1, self.line2) if part)
+
+    def as_text(self):
+        """Snapshot stored on orders, so later edits don't change past orders."""
+        return (f'{self.full_name}, {self.street}, {self.city}, {self.state} - {self.pincode}. '
+                f'Phone: {self.phone}')
+
+
 # Signal to create Profile when a new CustomUser is created
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_user_profile(sender, instance, created, **kwargs):

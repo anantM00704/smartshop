@@ -1,30 +1,37 @@
-<!-- filepath: c:\Users\anant\IR_project\smartshop\templates\orders\orders.html -->
 {% extends "base.html" %}
-{% block title %}My Orders{% endblock %}
+{% block title %}Your orders - SmartShop{% endblock %}
+
 {% block content %}
-<h2>My Orders</h2>
-<table class="table">
-  <thead>
-    <tr>
-      <th>Product</th>
-      <th>Address</th>
-      <th>Status</th>
-      <th>Order Date</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for order in orders %}
-      <tr>
-        <td>{{ order.product.name }}</td>
-        <td>{{ order.address }}</td>
-        <td>{{ order.status }}</td>
-        <td>{{ order.created_at }}</td>
-      </tr>
-    {% empty %}
-      <tr>
-        <td colspan="4" class="text-center">No orders found.</td>
-      </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="container mt-4">
+  {% include "registration/_profile_nav.html" with active='orders' %}
+  <h3 class="mb-3">Your orders</h3>
+
+  {% for order in orders %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-light d-flex flex-wrap gap-4 small">
+        <div><div class="text-muted">ORDER PLACED</div>{{ order.created_at|date:"j M Y, g:i A" }}</div>
+        <div><div class="text-muted">TOTAL</div>₹{{ order.total_amount|floatformat:0 }}</div>
+        <div class="flex-grow-1"><div class="text-muted">DELIVER TO</div>{{ order.address|truncatechars:90 }}</div>
+        <div class="text-end"><div class="text-muted">ORDER #{{ order.id }}</div><span class="badge text-bg-success">{{ order.status }}</span></div>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for item in order.items.all %}
+          <li class="list-group-item d-flex justify-content-between">
+            <span>
+              {{ item.product_name|truncatechars:90 }}
+              <span class="small text-muted d-block">Qty {{ item.quantity }}{% if item.seller and item.seller != 'Unknown' %} &middot; {{ item.seller }}{% endif %}</span>
+            </span>
+            <span class="fw-semibold text-nowrap">₹{{ item.line_total|floatformat:0 }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% empty %}
+    <div class="text-center text-muted border rounded py-5">
+      <i class="bi bi-box-seam fs-1"></i>
+      <p class="mt-2 mb-3">You haven't placed any orders yet.</p>
+      <a href="{% url 'search_results' %}" class="btn btn-primary">Start shopping</a>
+    </div>
+  {% endfor %}
+</div>
 {% endblock %}

@@ -38,11 +38,18 @@
 
     <!-- Location Section (Moved to the Left) -->
     {% if request.resolver_match.url_name not in auth_pages %}
-        <span class="navbar-text text-white order-lg-0 me-lg-3 mt-2 mt-lg-0" {# Adjusted margins #}
-              id="user-location"
-              data-profile-location="{{ user.profile.delivery_location|default:'' }}"> {# Adjust 'delivery_location' if your field name differs #}
-            <i class="bi bi-geo-alt"></i> Loading Location...
-        </span>
+        {% if default_address %}
+            {# A saved default address beats browser geolocation, like on Amazon/Flipkart. #}
+            <a href="{% url 'address_list' %}" class="navbar-text text-white text-decoration-none order-lg-0 me-lg-3 mt-2 mt-lg-0 small lh-sm">
+                <span class="opacity-75">Deliver to {{ default_address.full_name|truncatechars:18 }}</span><br>
+                <i class="bi bi-geo-alt"></i> <strong>{{ default_address.city }} {{ default_address.pincode }}</strong>
+            </a>
+        {% else %}
+            <span class="navbar-text text-white order-lg-0 me-lg-3 mt-2 mt-lg-0" id="user-location"
+                  data-profile-location="{{ user.profile.delivery_location|default:'' }}">
+                <i class="bi bi-geo-alt"></i> <span class="js-location-text">Loading location...</span>
+            </span>
+        {% endif %}
     {% endif %}
 
     <!-- Right-aligned Search Bar -->
@@ -63,6 +70,7 @@
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdownMerged">
                   <li><a class="dropdown-item" href="{% url 'profile' %}">Your Profile</a></li>
+                  <li><a class="dropdown-item" href="{% url 'address_list' %}">Saved Addresses</a></li>
                   <li><a class="dropdown-item" href="{% url 'orders' %}">Your Orders</a></li>
                   <li><hr class="dropdown-divider"></li>
                   <li>
@@ -72,6 +80,14 @@
                       </form>
                   </li>
                 </ul>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white position-relative" href="{% url 'cart' %}" aria-label="Cart, {{ cart_count }} item{{ cart_count|pluralize }}">
+                    <i class="bi bi-cart3 fs-4"></i>
+                    {% if cart_count %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">{{ cart_count }}</span>
+                    {% endif %}
+                </a>
             </li>
         {% else %}
             <li class="nav-item">
@@ -129,85 +145,33 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
-    {# Geolocation Script with Profile Fallback #}
+    {# "Deliver to" from browser geolocation; only used when there is no saved default address. #}
     <script>
-       function updateLocationDisplay(message) {
-           const locationElement = document.getElementById("user-location");
-           if(locationElement) {
-               console.log("Updating location display:", message); // Debugging
-               locationElement.innerHTML = `<i class="bi bi-geo-alt"></i> ${message}`;
-           }
-        }
-
-        const locationElement = document.getElementById("user-location");
-
-        function displayFallbackLocation() {
-            let fallbackMessage = "Deliver to Your Location"; // Ultimate default
-            if (locationElement) {
-                const profileLocation = locationElement.dataset.profileLocation;
-                // Check if profileLocation exists and is not just whitespace
-                if (profileLocation && profileLocation.trim() !== '') {
-                    fallbackMessage = `Deliver to ${profileLocation.trim()}`; // Use trimmed profile location
-                }
-            }
-            updateLocationDisplay(fallbackMessage);
-        }
-
-       // Only run if the location element exists (i.e., not on auth pages)
-       if (locationElement) {
-           if (navigator.geolocation) {
-               navigator.geolocation.getCurrentPosition(
-                   // Success Callback
-                   function (position) {
-                       const latitude = position.coords.latitude;
-                       const longitude = position.coords.longitude;
-                       console.log("Geolocation success:", latitude, longitude);
-                       // Use Nominatim reverse geocoding API
-                       fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`)
-                           .then(response => response.ok ? response.json() : Promise.reject('Network response was not ok.'))
-                           .then(data => {
-                               console.log("Reverse Geocoding API Response:", data);
-                               const address = data.address || {};
-                               const locationName = address.city || address.town || address.village || address.county || "Your Area";
-                               updateLocationDisplay(`Deliver to ${locationName}`);
-                           })
-                           .catch(error => {
-                               console.error("Error fetching location name:", error);
-                               // Fallback to profile location if reverse geocoding fails
-                               displayFallbackLocation();
-                           });
-                   },
-                   // Error Callback
-                   function (error) {
-                       console.error("Geolocation error:", error);
-                       let displayMessage;
-                       if (error.code === 1) { // PERMISSION_DENIED
-                           displayMessage = "Allow location access?";
-                           // Still display profile location even if permission denied, as a fallback
-                           displayFallbackLocation();
-                           // Override the generic message if profile location was found
-                           const profileLocation = locationElement.dataset.profileLocation;
-                           if (!profileLocation || profileLocation.trim() === '') {
-                              updateLocationDisplay(displayMessage); // Show 'Allow access?' only if no profile location
-                           }
-                       } else if (error.code === 2 || error.code === 3) { // POSITION_UNAVAILABLE or TIMEOUT
-                           // Use Fallback (Profile Location or Default)
-                           displayFallbackLocation();
-                       } else { // Other errors
-                           displayMessage = "Location Error";
-                           updateLocationDisplay(displayMessage); // Show generic error if fallback isn't appropriate
-                       }
-                   },
-                   { timeout: 10000 } // Timeout for geolocation attempt
-               );
-           } else {
-               // Geolocation not supported by browser
-               console.log("Geolocation not supported by browser.");
-               displayFallbackLocation(); // Try showing profile location
-           }
-       } else {
-            console.log("Location element not found (likely auth page).");
-       }
+    (function () {
+        const el = document.getElementById('user-location');
+        if (!el) return;  // default address shown server-side, or an auth page
+        const textEl = el.querySelector('.js-location-text');
+        const show = (text) => { textEl.textContent = text; };  // textContent: never inject HTML
+        const fallback = () => {
+            const saved = (el.dataset.profileLocation || '').trim();
+            show(saved ? `Deliver to ${saved}` : 'Deliver to your location');
+        };
+        if (!navigator.geolocation) { fallback(); return; }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const { latitude, longitude } = pos.coords;
+                fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`)
+                    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+                    .then((data) => {
+                        const a = data.address || {};
+                        show(`Deliver to ${a.city || a.town || a.village || a.county || 'your area'}`);
+                    })
+                    .catch(fallback);
+            },
+            fallback,
+            { timeout: 10000 }
+        );
+    })();
     </script>
     <script>
     // Search autocomplete (debounced) for the navbar search box.

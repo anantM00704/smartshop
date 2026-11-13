@@ -22,6 +22,7 @@ urlpatterns = [
     path('users/', include('users.urls')),
     path('dashboard/', include('dashboard.urls')),
     path('orders/', include('orders.urls')),
+    path('cart/', include('orders.cart_urls')),
     path('', include('search.urls')),  # /search/ and /autocomplete/
     path('', lambda request: redirect('login')),  # Redirect root URL to the login page
 ]

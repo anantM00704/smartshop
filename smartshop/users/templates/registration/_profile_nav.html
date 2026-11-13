@@ -1,0 +1,12 @@
+{# Profile section tabs. Set `active` to 'preferences', 'addresses' or 'orders'. #}
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item">
+    <a class="nav-link{% if active == 'preferences' %} active{% endif %}" href="{% url 'profile' %}"><i class="bi bi-person me-1"></i>Preferences</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if active == 'addresses' %} active{% endif %}" href="{% url 'address_list' %}"><i class="bi bi-geo-alt me-1"></i>Saved addresses</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if active == 'orders' %} active{% endif %}" href="{% url 'orders' %}"><i class="bi bi-box-seam me-1"></i>Your orders</a>
+  </li>
+</ul>

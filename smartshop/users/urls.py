@@ -16,6 +16,11 @@ urlpatterns = [
     path('edit-profile/', views.edit_profile, name='edit_profile'),
     path('profile/', views.profile, name='profile'),
     path('api/process-preferences/', views.process_preference_input, name='process_preferences'),
+    path('addresses/', views.address_list, name='address_list'),
+    path('addresses/new/', views.address_form, name='address_add'),
+    path('addresses/<int:address_id>/edit/', views.address_form, name='address_edit'),
+    path('addresses/<int:address_id>/delete/', views.address_delete, name='address_delete'),
+    path('addresses/<int:address_id>/default/', views.address_make_default, name='address_make_default'),
 
 
 ]

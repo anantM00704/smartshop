@@ -5,8 +5,14 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.mail import send_mail
 from django.contrib.auth.forms import SetPasswordForm
+from django.core.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
+from . import addresses as address_service
 from . import otp as otp_service
+from .forms import AddressForm
+from .models import Address
 from django.shortcuts import render
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
@@ -206,3 +212,65 @@ def process_preference_input(request):
     except Exception:
         logger.exception("Preference extraction failed")
         return JsonResponse({'status': 'error', 'message': 'Could not process your input.'}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Saved addresses (profile section)
+# ---------------------------------------------------------------------------
+
+def _safe_next(request, fallback):
+    target = request.POST.get('next') or request.GET.get('next')
+    if target and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()},
+                                                  require_https=request.is_secure()):
+        return target
+    return fallback
+
+
+@login_required
+def address_list(request):
+    return render(request, 'registration/addresses.html', {
+        'addresses': address_service.addresses_for(request.user),
+        'max_addresses': Address.MAX_PER_USER,
+    })
+
+
+@login_required
+def address_form(request, address_id=None):
+    instance = get_object_or_404(Address, pk=address_id, user=request.user) if address_id else None
+    form = AddressForm(request.POST or None, instance=instance)
+    if instance is None and request.method == 'GET':
+        # Prefill from the account so the first address takes seconds to add.
+        form.initial.update({'full_name': request.user.get_full_name() or request.user.username,
+                             'phone': request.user.mobile_number})
+    if request.method == 'POST' and form.is_valid():
+        address = form.save(commit=False)
+        address.user = request.user
+        try:
+            address_service.save_address(address, make_default=form.cleaned_data.get('is_default'))
+        except ValidationError as exc:
+            messages.error(request, exc.messages[0])
+        else:
+            messages.success(request, 'Address saved.' if instance else 'Address added.')
+            return redirect(_safe_next(request, 'address_list'))
+    return render(request, 'registration/address_form.html', {
+        'form': form, 'editing': instance is not None,
+        'next': _safe_next(request, ''),  # only same-site URLs reach the template
+    })
+
+
+@login_required
+@require_POST
+def address_delete(request, address_id):
+    address = get_object_or_404(Address, pk=address_id, user=request.user)
+    address_service.delete_address(address)
+    messages.info(request, 'Address deleted.')
+    return redirect(_safe_next(request, 'address_list'))
+
+
+@login_required
+@require_POST
+def address_make_default(request, address_id):
+    address = get_object_or_404(Address, pk=address_id, user=request.user)
+    address_service.set_default(address)
+    messages.success(request, f'{address.full_name}, {address.city} is now your default address.')
+    return redirect(_safe_next(request, 'address_list'))

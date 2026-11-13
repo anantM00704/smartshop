@@ -15,6 +15,7 @@ class PasswordResetOTP(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
 
     def is_valid(self):
         return timezone.now() < self.created_at + datetime.timedelta(minutes=5)
@@ -51,4 +52,5 @@ def create_user_profile(sender, instance, created, **kwargs):
 # Signal to save Profile when CustomUser is saved
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def save_user_profile(sender, instance, **kwargs):
-    instance.profile.save()
+    profile, _ = Profile.objects.get_or_create(user=instance)
+    profile.save()

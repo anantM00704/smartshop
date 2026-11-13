@@ -1,6 +1,11 @@
-import random
 import logging
 import json
+import secrets
+from datetime import timedelta
+from django.conf import settings
+from django.contrib.auth.forms import SetPasswordForm
+from django.utils import timezone
+from . import otp as otp_service
 from django.shortcuts import render
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
@@ -39,53 +44,83 @@ def sign_up(request):
 
 def password_reset_mobile(request):
     if request.method == "POST":
-        mobile = request.POST.get('mobile')
-        User = get_user_model()
-        try:
-            user = User.objects.get(mobile_number=mobile)
-            otp = str(random.randint(100000, 999999))
-            PasswordResetOTP.objects.create(user=user, otp=otp)
-            # Integrate with SMS gateway here
-            print(f"Send OTP {otp} to {mobile}")  # For demo/testing
+        mobile = (request.POST.get('mobile') or '').strip()
+        user = CustomUser.objects.filter(mobile_number=mobile).first()
+        if not user:
+            messages.error(request, "No account is registered with this mobile number.")
+            return render(request, 'registration/password_reset_mobile.html', {'mobile': mobile})
+
+        latest = PasswordResetOTP.objects.filter(user=user).order_by('-created_at').first()
+        if latest and timezone.now() < latest.created_at + timedelta(seconds=otp_service.RESEND_COOLDOWN_SECONDS):
+            wait = int((latest.created_at + timedelta(seconds=otp_service.RESEND_COOLDOWN_SECONDS) - timezone.now()).total_seconds()) + 1
+            messages.warning(request, f"Please wait {wait} seconds before requesting a new code.")
             request.session['reset_mobile_user'] = user.id
-            return render(request, 'registration/password_reset_mobile_verify.html', {'mobile': mobile})
-        except User.DoesNotExist:
-            messages.error(request, "Mobile number not found.")
+            return redirect('password_reset_mobile_verify')
+
+        # Only the newest code is ever valid.
+        PasswordResetOTP.objects.filter(user=user).delete()
+        otp = otp_service.generate_otp()
+        PasswordResetOTP.objects.create(user=user, otp=otp)
+        reached = otp_service.deliver_otp(user, mobile, otp)
+
+        request.session['reset_mobile_user'] = user.id
+        if reached:
+            messages.success(request, "Verification code sent by " + " and ".join(reached) + ".")
+        elif settings.DEBUG:
+            messages.warning(request, "No SMS/email channel is configured. In development the code is printed in the server terminal.")
+        else:
+            messages.error(request, "We couldn't send a verification code right now. Please try again later.")
+            return render(request, 'registration/password_reset_mobile.html', {'mobile': mobile})
+        return redirect('password_reset_mobile_verify')
     return render(request, 'registration/password_reset_mobile.html')
 
+
 def password_reset_mobile_verify(request):
+    user_id = request.session.get('reset_mobile_user')
+    user = CustomUser.objects.filter(id=user_id).first() if user_id else None
+    if not user:
+        messages.error(request, "Session expired. Please request a new code.")
+        return redirect('password_reset_mobile')
+
     if request.method == "POST":
-        otp = request.POST.get('otp')
-        user_id = request.session.get('reset_mobile_user')
-        if not user_id:
-            messages.error(request, "Session expired. Try again.")
+        entered = (request.POST.get('otp') or '').strip()
+        otp_obj = PasswordResetOTP.objects.filter(user=user).order_by('-created_at').first()
+        if not otp_obj or not otp_obj.is_valid():
+            messages.error(request, "This code has expired. Please request a new one.")
             return redirect('password_reset_mobile')
-        user = CustomUser.objects.get(id=user_id)
-        otp_obj = PasswordResetOTP.objects.filter(user=user, otp=otp).order_by('-created_at').first()
-        if otp_obj and otp_obj.is_valid():
+        if otp_obj.attempts >= otp_service.MAX_VERIFY_ATTEMPTS:
+            otp_obj.delete()
+            messages.error(request, "Too many incorrect attempts. Please request a new code.")
+            return redirect('password_reset_mobile')
+        if secrets.compare_digest(entered, otp_obj.otp):
+            otp_obj.delete()
+            del request.session['reset_mobile_user']
             request.session['otp_verified_user_id'] = user.id
-            logger.debug(f"otp_verified_user_id set for user {user.id}")
             return redirect('password_reset_mobile_set_new_password')
-        else:
-            messages.error(request, "Invalid or expired OTP.")
-    return render(request, 'registration/password_reset_mobile_verify.html')
+        otp_obj.attempts += 1
+        otp_obj.save(update_fields=['attempts'])
+        remaining = otp_service.MAX_VERIFY_ATTEMPTS - otp_obj.attempts
+        messages.error(request, f"Incorrect code. {remaining} attempt(s) left.")
+
+    return render(request, 'registration/password_reset_mobile_verify.html', {
+        'masked_mobile': otp_service.mask_mobile(user.mobile_number),
+    })
+
 
 def password_reset_mobile_set_new_password(request):
     user_id = request.session.get('otp_verified_user_id')
-    if not user_id:
-        logger.debug("otp_verified_user_id not found in session.")
+    user = CustomUser.objects.filter(id=user_id).first() if user_id else None
+    if not user:
         messages.error(request, "Session expired or unauthorized access.")
         return redirect('password_reset_mobile')
-    user = CustomUser.objects.get(id=user_id)
-    if request.method == "POST":
-        new_password = request.POST.get('new_password')
-        user.set_password(new_password)
-        user.save()
-        # Clear session flag after use
+
+    form = SetPasswordForm(user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
         del request.session['otp_verified_user_id']
-        messages.success(request, "Password reset successful. Please login.")
+        messages.success(request, "Password reset successful. Please log in.")
         return redirect('login')
-    return render(request, 'registration/password_reset_mobile_set_new_password.html')
+    return render(request, 'registration/password_reset_mobile_set_new_password.html', {'form': form})
 
 
 def password_reset_options(request):

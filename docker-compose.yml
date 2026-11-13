@@ -1,6 +1,23 @@
 # Local production-like stack.  Usage:  docker compose up --build
-# Postgres, Redis and Kafka will be added here in later phases.
+# Redis and Kafka will be added here in later phases.
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartshop
+      POSTGRES_USER: smartshop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartshop-local-only}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"   # lets local tools (and `manage.py` outside Docker) reach the DB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartshop -d smartshop"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   web:
     build: .
     image: smartshop-web:local
@@ -13,11 +30,13 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
       DJANGO_CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+      DATABASE_URL: "postgres://smartshop:${POSTGRES_PASSWORD:-smartshop-local-only}@db:5432/smartshop"
       RUN_MIGRATIONS: "true"
       LOAD_CATALOG: "true"
-    volumes:
-      - db_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  db_data:
+  pg_data:

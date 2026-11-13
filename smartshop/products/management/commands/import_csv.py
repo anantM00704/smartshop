@@ -1,128 +1,105 @@
+"""Import scraped CSV exports through the shared ingestion service.
+
+Each known export file has its own column names (from the original scraping tool);
+COLUMN_MAPS translates them to listing fields. Unknown files fall back to generic names.
+"""
 import os
+
 import pandas as pd
-from django.core.management.base import BaseCommand
-from products.models import Product, Category
+from django.core.management.base import BaseCommand, CommandError
 
-def get_category(main, sub):
-    main_cat, _ = Category.objects.get_or_create(name=main, parent=None)
-    sub_cat, _ = Category.objects.get_or_create(name=sub, parent=main_cat)
-    return sub_cat
+from products.ingestion import Listing, clean_text, ingest_listing
+from products.models import Category
 
-def clean_price(price):
-    if not price or pd.isnull(price):
-        return None
-    price = str(price).replace('₹', '').replace(',', '').strip()
-    try:
-        return float(price)
-    except Exception:
-        return None
+# field -> candidate column names, first non-empty wins
+COLUMN_MAPS = {
+    'shirts_amazon.csv': {
+        'name': ['brand_shirt', 'brand_name'], 'url': ['brand_shirt_url'],
+        'price': ['brand_price'], 'delivery_date': ['brand_delivery_date'],
+    },
+    'shirt_flipkart.csv': {
+        'name': ['name_shirt_type', 'name_name'], 'url': ['name_shirt_type_url'], 'price': ['name_price'],
+    },
+    'earphones.csv': {'name': ['name_name'], 'price': ['name_price']},
+    'earphones_flipkart.csv': {'name': ['name_name'], 'url': ['name_price_url'], 'price': ['name_price']},
+    'tops_amazon.csv': {
+        'name': ['brand_type', 'brand_name'], 'url': ['brand_type_url'],
+        'price': ['brand_price'], 'delivery_date': ['brand_delivery_date_name'],
+    },
+    'lipstick_amazon.csv': {
+        'name': ['name_name'], 'url': ['name_url'], 'price': ['name_price'],
+        'delivery_date': ['name_delivery_date_name'],
+    },
+    'lipstick_nykaa.csv': {'name': ['name_name'], 'url': ['name_url'], 'price': ['name_price']},
+}
+
+GENERIC_MAP = {
+    'name': ['name', 'brand_name', 'brand_shirt', 'brand_type', 'name_name'],
+    'url': ['product_url', 'url', 'name_url', 'brand_shirt_url', 'brand_type_url'],
+    'price': ['price', 'name_price', 'brand_price'],
+    'mrp': ['mrp', 'original_price'],
+    'delivery_date': ['delivery_date', 'brand_delivery_date', 'brand_delivery_date_name'],
+}
+COMMON_FIELDS = {
+    'image_url': ['image_url', 'image'],
+    'rating': ['rating', 'name_ratings'],
+}
+
+
+def detect_seller(file_name, explicit=None):
+    if explicit:
+        return explicit
+    for seller in ('Amazon', 'Flipkart', 'Nykaa', 'Myntra'):
+        if seller.lower() in file_name:
+            return seller
+    return 'Unknown'
+
+
+def pick(row, columns):
+    for column in columns:
+        value = clean_text(row.get(column))
+        if value:
+            return value
+    return ''
+
 
 class Command(BaseCommand):
-    help = 'Import products from CSV, specifying main and subcategory dynamically.'
+    help = 'Import products from a scraped CSV into a main category > sub category.'
 
     def add_arguments(self, parser):
         parser.add_argument('csv_file', type=str, help='CSV file to import')
         parser.add_argument('--main_category', type=str, required=True, help='Main category name')
         parser.add_argument('--sub_category', type=str, required=True, help='Subcategory name')
+        parser.add_argument('--seller', type=str, help='Seller name (default: detected from file name)')
 
     def handle(self, *args, **options):
         csv_file = options['csv_file']
-        main_cat = options['main_category']
-        sub_cat = options['sub_category']
-        category = get_category(main_cat, sub_cat)
+        try:
+            df = pd.read_csv(csv_file, dtype=str, keep_default_na=False)
+        except (OSError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+            raise CommandError(f'Cannot read {csv_file}: {exc}')
+
+        main_cat, _ = Category.objects.get_or_create(name=options['main_category'], parent=None)
+        category, _ = Category.objects.get_or_create(name=options['sub_category'], parent=main_cat)
         file_name = os.path.basename(csv_file).lower()
+        seller = detect_seller(file_name, options.get('seller'))
+        columns = {**GENERIC_MAP, **COLUMN_MAPS.get(file_name, {}), **COMMON_FIELDS}
 
-        df = pd.read_csv(csv_file)
-        created, updated = 0, 0
-
+        totals = {'product_created': 0, 'offer_created': 0, 'price_changed': 0, 'skipped': 0}
         for _, row in df.iterrows():
-            # --- SHIRTS AMAZON ---
-            if file_name == 'shirts_amazon.csv':
-                name = row.get('brand_shirt') or row.get('brand_name') or 'No Name'
-                product_url = row.get('brand_shirt_url') or ''
-                price = clean_price(row.get('brand_price'))
-                price_url = row.get('brand_price_url') or ''
-                delivery_date = row.get('brand_delivery_date') or ''
-            # --- SHIRTS FLIPKART ---
-            elif file_name == 'shirt_flipkart.csv':
-                name = row.get('name_shirt_type') or row.get('name_name') or 'No Name'
-                product_url = row.get('name_shirt_type_url') or ''
-                price = clean_price(row.get('name_price'))
-                price_url = row.get('name_price_url') or ''
-                delivery_date = ''
-            # --- EARPHONES AMAZON ---
-            elif file_name == 'earphones.csv':
-                name = row.get('name_name') or 'No Name'
-                product_url = ''
-                price = clean_price(row.get('name_price'))
-                price_url = ''
-                delivery_date = ''
-            # --- EARPHONES FLIPKART ---
-            elif file_name == 'earphones_flipkart.csv':
-                name = row.get('name_name') or 'No Name'
-                product_url = row.get('name_price_url') or ''
-                price = clean_price(row.get('name_price'))
-                price_url = row.get('name_price_url') or ''
-                delivery_date = ''
-            # --- TOPS AMAZON ---
-            elif file_name == 'tops_amazon.csv':
-                name = row.get('brand_type') or row.get('brand_name') or 'No Name'
-                product_url = row.get('brand_type_url') or ''
-                price = clean_price(row.get('brand_price'))
-                price_url = row.get('brand_price_url') or ''
-                delivery_date = row.get('brand_delivery_date_name') or ''
-            # --- LIPSTICK AMAZON ---
-            elif file_name == 'lipstick_amazon.csv':
-                name = row.get('name_name') or 'No Name'
-                product_url = row.get('name_url') or ''
-                price = clean_price(row.get('name_price'))
-                price_url = row.get('name_price_url') or ''
-                delivery_date = row.get('name_delivery_date_name') or ''
-            # --- LIPSTICK NYKAA ---
-            elif file_name == 'lipstick_nykaa.csv':
-                name = row.get('name_name') or 'No Name'
-                product_url = row.get('name_url') or ''
-                price = clean_price(row.get('name_price'))
-                price_url = row.get('name_price_url') or ''
-                delivery_date = ''
-            else:
-                # fallback for unknown files: try to use generic column names
-                name = row.get('name') or row.get('brand_name') or row.get('brand_shirt') or row.get('brand_type') or 'No Name'
-                product_url = row.get('product_url') or row.get('name_url') or row.get('brand_shirt_url') or row.get('brand_type_url') or ''
-                price = clean_price(row.get('price') or row.get('name_price') or row.get('brand_price'))
-                price_url = row.get('price_url') or row.get('name_price_url') or row.get('brand_price_url') or ''
-                delivery_date = row.get('delivery_date') or row.get('brand_delivery_date') or row.get('brand_delivery_date_name') or ''
-
-            image_url = row.get('image_url') or ''
-            rating = row.get('rating') or row.get('name_ratings') or None
-            reviews = row.get('reviews') or row.get('name_reviews') or ''
-            source_site = (
-                'Amazon' if 'amazon' in file_name else
-                'Flipkart' if 'flipkart' in file_name else
-                'Nykaa' if 'nykaa' in file_name else
-                'Unknown'
-            )
-
-            obj, was_created = Product.objects.update_or_create(
-                name=name,
-                category=category,
-                defaults={
-                    'product_url': product_url,
-                    'price': price,
-                    'price_url': price_url,
-                    'delivery_date': delivery_date,
-                    'image_url': image_url,
-                    'rating': rating,
-                    'source_site': source_site,
-                    'reviews': reviews,
-                    'is_available': True,
-                }
-            )
-            if was_created:
-                created += 1
-            else:
-                updated += 1
+            fields = {field: pick(row, cols) for field, cols in columns.items()}
+            if not fields['name']:
+                totals['skipped'] += 1
+                continue
+            result = ingest_listing(Listing(
+                name=fields['name'], seller=seller, url=fields.get('url', ''), category=category,
+                price=fields.get('price'), mrp=fields.get('mrp'), image_url=fields.get('image_url', ''),
+                rating=fields.get('rating'), delivery_date=fields.get('delivery_date', ''),
+            ))
+            for key, value in result.items():
+                totals[key] += int(value)
 
         self.stdout.write(self.style.SUCCESS(
-            f"Imported {created} new and updated {updated} products into {main_cat} > {sub_cat}"
-        ))
+            f"{len(df)} rows from {seller} into {main_cat} > {category}: "
+            f"{totals['product_created']} new products, {totals['offer_created']} new offers, "
+            f"{totals['price_changed']} price changes, {totals['skipped']} skipped"))

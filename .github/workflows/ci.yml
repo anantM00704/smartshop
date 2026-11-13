@@ -15,9 +15,21 @@ jobs:
     defaults:
       run:
         working-directory: smartshop
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smartshop
+          POSTGRES_USER: smartshop
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartshop -d smartshop"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DJANGO_SECRET_KEY: ci-only-not-secret
       DJANGO_DEBUG: "false"
+      DATABASE_URL: postgres://smartshop:ci-only@localhost:5432/smartshop
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

@@ -7,3 +7,5 @@ pandas
 python-dotenv
 gunicorn
 whitenoise
+psycopg[binary]
+dj-database-url

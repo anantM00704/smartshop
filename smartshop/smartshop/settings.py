@@ -111,13 +111,19 @@ WSGI_APPLICATION = 'smartshop.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        # Overridable so containers can keep the DB on a mounted volume.
-        'NAME': os.environ.get('SQLITE_PATH', str(BASE_DIR / 'db.sqlite3')),
+# Postgres when DATABASE_URL is set (docker-compose, AWS RDS); SQLite otherwise.
+_database_url = os.environ.get('DATABASE_URL')
+if _database_url:
+    import dj_database_url
+    DATABASES = {'default': dj_database_url.parse(_database_url, conn_max_age=60)}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            # Overridable so containers can keep the DB on a mounted volume.
+            'NAME': os.environ.get('SQLITE_PATH', str(BASE_DIR / 'db.sqlite3')),
+        }
     }
-}
 
 
 # Password validation

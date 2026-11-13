@@ -28,7 +28,7 @@ SmartShop is a Django e-commerce aggregator: it brings product listings collecte
 |---|---|---|
 | Backend | Django 5.0 (server-rendered templates) | Django REST Framework API |
 | Frontend | Bootstrap 5, vanilla JS | Next.js + Tailwind, React Native app |
-| Database | SQLite | PostgreSQL (RDS) |
+| Database | PostgreSQL 16 in Docker (SQLite for quick local runs) | Amazon RDS |
 | Search | Substring + fuzzywuzzy ranking | Postgres full-text / OpenSearch |
 | Serving | gunicorn + WhiteNoise in Docker | ECS Fargate behind an ALB, CloudFront CDN |
 | CI | GitHub Actions (tests + Docker smoke test) | + deploy to AWS |
@@ -63,7 +63,9 @@ copy .env.example .env    # set DJANGO_SECRET_KEY at minimum
 docker compose up --build
 ```
 
-Open http://localhost:8000/. The container runs migrations and loads the catalog on first start. The database lives in the `db_data` volume. You can check health at http://localhost:8000/healthz.
+This starts two containers: **PostgreSQL 16** (`db`) and the Django app (`web`). Open http://localhost:8000/. The app runs migrations and loads the catalog on first start. Data lives in the `pg_data` volume, and `docker compose down -v` resets it. You can check health at http://localhost:8000/healthz.
+
+Without Docker, the app uses SQLite. Set `DATABASE_URL` (for example `postgres://smartshop:smartshop-local-only@localhost:5432/smartshop` with `docker compose up -d db`) to use Postgres instead.
 
 ### Configuration (`.env`)
 
@@ -105,15 +107,25 @@ smartshop/                 repo root
     └── static/            CSS, JS, images
 ```
 
-## Importing more products
+## Catalog data model and ingestion
 
-`products/management/commands/import_csv.py` imports scraped CSV exports:
+- **Product:** the canonical item. `price` always holds the cheapest in-stock offer, falling back to the last known price.
+- **Offer:** one seller's listing of a product (Amazon, Flipkart, Nykaa and so on), with price, MRP, stock and URL. One product can have many offers, which enables price comparison.
+- **PricePoint:** append-only price history. A row is written only when price or stock changes.
+
+Everything enters through one service, `products/ingestion.py` (`ingest_listing`). It cleans values (`₹1,299`, `NaN`, `4.2 out of 5 stars`), strips tracking parameters from URLs (Amazon becomes `/dp/<ASIN>`, and for Flipkart only `pid` is kept), matches an existing offer or product, and records price changes.
 
 ```powershell
-python manage.py import_csv path\to\file.csv --main_category Electronics --sub_category "Mobile Phones"
+# Scraped CSV exports (column mappings for the original Amazon/Flipkart/Nykaa files)
+python manage.py import_csv path\to\shirts_amazon.csv --main_category "Men's Fashion" --sub_category Shirts
+
+# JSON list of listings (what scrapers and API clients will produce)
+python manage.py ingest_listings listings.json
 ```
 
-A proper scraping/ingestion pipeline (official affiliate APIs plus Playwright scrapers feeding Kafka) is planned. See the roadmap.
+Each `ingest_listings` item has `name`, `seller`, `url` and `price`, plus optional `mrp`, `in_stock`, `image_url`, `rating`, `delivery_date`, `category` and `main_category`.
+
+Scrapers (official affiliate APIs plus Playwright, scheduled and feeding Kafka) are next. See the roadmap.
 
 ---
 

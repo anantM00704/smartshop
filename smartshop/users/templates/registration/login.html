@@ -8,6 +8,6 @@
     <button type="submit" class="btn btn-primary">Login</button>
 </form>
 <p>Don't have an account? <a href="{% url 'sign_up' %}">Sign up here</a>.</p>
-<p><a href="{% url 'password_reset_options' %}">Forgot password?</a></p>
+<p><a href="{% url 'password_reset_options' %}">Forgot password?</a> &middot; <a href="{% url 'forgot_username' %}">Forgot username?</a></p>
 
 {% endblock %}

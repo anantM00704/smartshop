@@ -3,6 +3,7 @@ import json
 import secrets
 from datetime import timedelta
 from django.conf import settings
+from django.core.mail import send_mail
 from django.contrib.auth.forms import SetPasswordForm
 from django.utils import timezone
 from . import otp as otp_service
@@ -118,9 +119,36 @@ def password_reset_mobile_set_new_password(request):
     if request.method == "POST" and form.is_valid():
         form.save()
         del request.session['otp_verified_user_id']
-        messages.success(request, "Password reset successful. Please log in.")
+        messages.success(request, f"Password reset successful. Log in with your username: {user.get_username()}")
         return redirect('login')
     return render(request, 'registration/password_reset_mobile_set_new_password.html', {'form': form})
+
+
+def forgot_username(request):
+    """Email the username(s) registered to an address. Same response either way to avoid account enumeration."""
+    if request.method == "POST":
+        email = (request.POST.get('email') or '').strip()
+        users = list(CustomUser.objects.filter(email__iexact=email, is_active=True)) if email else []
+        if users and otp_service.email_is_configured():
+            names = "\n".join(f"  - {u.get_username()}" for u in users)
+            try:
+                send_mail(
+                    subject='Your SmartShop username',
+                    message=(
+                        "You asked us to remind you of your SmartShop username.\n\n"
+                        f"Username(s) registered with this email:\n{names}\n\n"
+                        "If you didn't request this, you can ignore this email."
+                    ),
+                    from_email=settings.EMAIL_HOST_USER,
+                    recipient_list=[users[0].email],
+                )
+            except Exception as exc:
+                logger.warning("Username reminder email failed: %s", exc)
+        elif users and settings.DEBUG:
+            logger.warning("[DEV] Username reminder for %s: %s", email, [u.get_username() for u in users])
+        messages.success(request, "If an account exists for that email, we've sent the username to it.")
+        return redirect('login')
+    return render(request, 'registration/forgot_username.html')
 
 
 def password_reset_options(request):

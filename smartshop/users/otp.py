@@ -62,18 +62,25 @@ def _send_sms_twilio(mobile, message):
         return False
 
 
-def _send_email(email, otp):
-    if not (email and settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD):
+def email_is_configured():
+    return bool(settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD)
+
+
+def _send_email(user, otp):
+    if not (user.email and email_is_configured()):
         return False
     try:
         send_mail(
             subject='Your SmartShop password reset code',
             message=(
-                f"Your SmartShop verification code is {otp}.\n\n"
-                f"It expires in {OTP_TTL_MINUTES} minutes. If you didn't request this, ignore this email."
+                f"Hi {user.get_username()},\n\n"
+                f"Your SmartShop verification code is {otp}.\n"
+                f"It expires in {OTP_TTL_MINUTES} minutes.\n\n"
+                f"Your username, in case you've forgotten: {user.get_username()}\n\n"
+                "If you didn't request a password reset, you can ignore this email."
             ),
             from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[email],
+            recipient_list=[user.email],
         )
         return True
     except Exception as exc:  # SMTP errors vary widely; never crash the reset flow
@@ -87,7 +94,7 @@ def deliver_otp(user, mobile, otp):
     message = f"{otp} is your SmartShop verification code. Valid for {OTP_TTL_MINUTES} minutes."
     if _send_sms_twilio(mobile, message):
         reached.append(f"SMS to {mask_mobile(mobile)}")
-    if _send_email(user.email, otp):
+    if _send_email(user, otp):
         reached.append(f"email to {mask_email(user.email)}")
     if settings.DEBUG:
         logger.warning("[DEV] OTP for %s is %s", mask_mobile(mobile), otp)

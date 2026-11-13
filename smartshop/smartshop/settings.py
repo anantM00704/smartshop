@@ -167,6 +167,7 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or (f"SmartShop <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else 'webmaster@localhost')
 # Without SMTP credentials, print emails to the console instead of failing.
 EMAIL_BACKEND = (
     'django.core.mail.backends.smtp.EmailBackend'

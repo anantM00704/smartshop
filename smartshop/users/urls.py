@@ -10,6 +10,7 @@ urlpatterns = [
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(template_name='registration/password_reset_complete.html'), name='password_reset_complete'),
     path('password_reset_mobile/', views.password_reset_mobile, name='password_reset_mobile'),
     path('password_reset_options/', views.password_reset_options, name='password_reset_options'),
+    path('forgot_username/', views.forgot_username, name='forgot_username'),
     path('password_reset_mobile_verify/', views.password_reset_mobile_verify, name='password_reset_mobile_verify'),
     path('password_reset_mobile_set_new_password/', views.password_reset_mobile_set_new_password, name='password_reset_mobile_set_new_password'),
     path('edit-profile/', views.edit_profile, name='profile'),

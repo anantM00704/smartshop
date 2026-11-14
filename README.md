@@ -125,7 +125,34 @@ python manage.py ingest_listings listings.json
 
 Each `ingest_listings` item has `name`, `seller`, `url` and `price`, plus optional `mrp`, `in_stock`, `image_url`, `rating`, `delivery_date`, `category` and `main_category`.
 
-Scrapers (official affiliate APIs plus Playwright, scheduled and feeding Kafka) are next. See the roadmap.
+## Data sources (scraping framework)
+
+All external fetching goes through `scraping/http.py` (`PoliteClient`), which enforces these rules per host:
+
+| Rule | Behaviour |
+|---|---|
+| Rate limit | Minimum gap between requests (Flipkart API: 1 s, about 5% of the documented 20 req/s) and a daily quota |
+| Retries | 429/5xx/network errors are retried with exponential backoff and jitter, honouring `Retry-After`. It gives up rather than waiting more than 60 s |
+| robots.txt | Always honoured for HTML sources. Official APIs are governed by their API terms instead |
+| Circuit breaker | A 403 or a CAPTCHA/block page pauses that host for 6 h. **We never try to get around a block** |
+| Caching | GET responses are cached (30 min) and revalidated with ETags |
+| Identity | Honest `User-Agent` (`SCRAPER_USER_AGENT`). No browser impersonation |
+
+State is kept in Django's cache, so it becomes shared across workers once the cache points at Redis. We store only facts (name, price, MRP, stock, link) and always link back to the seller.
+
+**Sources** (`scraping/adapters/`):
+
+| Source | Type | Status |
+|---|---|---|
+| Flipkart Affiliate API | Official API | Ready. Needs `FLIPKART_AFFILIATE_ID` and `FLIPKART_AFFILIATE_TOKEN` from [affiliate.flipkart.com](https://affiliate.flipkart.com) |
+| Amazon PA-API, affiliate networks (Nykaa/Myntra) | Official APIs | Planned |
+
+```powershell
+python manage.py scrape flipkart -q "iphone 15" --dry-run          # preview, saves nothing
+python manage.py scrape flipkart -q "iphone 15" -q "galaxy s24" --category "Mobile Phones" --main-category Electronics
+```
+
+Every run is logged as a `ScrapeRun` (fetched, new products/offers, price changes, errors), visible in `/admin`.
 
 ---
 

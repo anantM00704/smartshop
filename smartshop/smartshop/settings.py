@@ -63,7 +63,8 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'orders',
-    
+    'scraping',
+
 ]
 
 MIDDLEWARE = [
@@ -181,11 +182,23 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = _env_bool('DJANGO_SSL_REDIRECT', False)
     SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_HSTS_SECONDS', '0'))
 
+# --- Scraping / data sources ---
+# Identify ourselves honestly; never impersonate a browser to evade blocks.
+SCRAPER_USER_AGENT = os.environ.get(
+    'SCRAPER_USER_AGENT', 'SmartShopBot/0.1 (price comparison research project)')
+FLIPKART_AFFILIATE_ID = os.environ.get('FLIPKART_AFFILIATE_ID', '')
+FLIPKART_AFFILIATE_TOKEN = os.environ.get('FLIPKART_AFFILIATE_TOKEN', '')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {'console': {'class': 'logging.StreamHandler'}},
     'root': {'handlers': ['console'], 'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO')},
+    'loggers': {
+        # httpx logs every request at INFO; our scraping client logs retries/blocks itself.
+        'httpx': {'level': 'WARNING'},
+        'httpcore': {'level': 'WARNING'},
+    },
 }
 
 # Default primary key field type
